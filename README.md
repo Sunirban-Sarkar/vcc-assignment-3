@@ -52,6 +52,7 @@ All commands for setup are available in the `commands.bash` file included in thi
 
 ## Directory Structure
 
+```
 auto-scale-project/
 ├── app.py                    # Flask stress-testing application
 ├── auto_scaler.py            # Auto-scaling logic and GCP integration
@@ -61,6 +62,7 @@ auto-scale-project/
 │   └── startup-script.sh     # Startup script for GCP VM
 ├── commands.bash             # All setup and configuration commands
 └── README.md
+```
 
 ## Usage Instructions
 

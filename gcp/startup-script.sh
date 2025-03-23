@@ -1,24 +1,24 @@
 #!/bin/bash
 
+# Redirect all output to a log file
+exec > >(tee /var/log/startup-script.log) 2>&1
+
+echo "Starting setup at $(date)"
+
 # Update and install dependencies
 apt-get update
 apt-get install -y python3-pip python3-venv git nginx
 
+# Remove default Nginx page
+rm -f /var/www/html/index.nginx-debian.html
+rm -f /etc/nginx/sites-enabled/default
+
 # Create app directory
-mkdir -p /app
+mkdir -p /app/templates
 cd /app
 
-# Set up Python environment
-python3 -m venv venv
-source venv/bin/activate
-pip install flask gunicorn psutil numpy
-
-# Create templates directory if not present in repo
-mkdir -p templates
-
-# Create or verify index.html exists
-if [ ! -f templates/index.html ]; then
-  cat > templates/index.html << 'EOL'
+# Create the HTML file
+cat > /app/templates/index.html << 'EOL'
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -248,11 +248,9 @@ if [ ! -f templates/index.html ]; then
 </body>
 </html>
 EOL
-fi
 
-# Create or verify app.py exists
-if [ ! -f app.py ]; then
-  cat > app.py << 'EOL'
+# Create the app.py file
+cat > /app/app.py << 'EOL'
 from flask import Flask, render_template, request, jsonify
 import psutil
 import multiprocessing
@@ -369,25 +367,31 @@ def stop_stress():
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
 EOL
-fi
 
-# Configure Nginx
+# Set up Python environment
+python3 -m venv venv
+venv/bin/pip install flask gunicorn psutil numpy
+
+# Configure Nginx - Make sure to set up a default server
 cat > /etc/nginx/sites-available/flask-app << 'EOL'
 server {
-    listen 80;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    
     server_name _;
-
+    
     location / {
-        proxy_pass http://localhost:5000;
+        proxy_pass http://127.0.0.1:5000;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 EOL
 
-ln -s /etc/nginx/sites-available/flask-app /etc/nginx/sites-enabled/
+ln -sf /etc/nginx/sites-available/flask-app /etc/nginx/sites-enabled/
 rm -f /etc/nginx/sites-enabled/default
-systemctl restart nginx
 
 # Create a systemd service for the Flask app
 cat > /etc/systemd/system/flask-app.service << 'EOL'
@@ -405,10 +409,22 @@ Restart=always
 WantedBy=multi-user.target
 EOL
 
-# Start and enable the service
+# Start and enable services
 systemctl daemon-reload
 systemctl start flask-app
 systemctl enable flask-app
+systemctl restart nginx
+
+# Test if the app is working
+echo "Testing if the app is running..."
+curl -s http://localhost:5000 | grep -q "Resource Stress Testing Tool"
+if [ $? -eq 0 ]; then
+    echo "Flask app is running correctly!"
+else
+    echo "Error: Flask app is not running correctly."
+    systemctl status flask-app
+fi
 
 # Signal that setup is complete
 touch /tmp/startup-complete
+echo "Setup completed at $(date)"

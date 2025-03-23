@@ -200,7 +200,7 @@ If you see the default Nginx welcome page on your GCP VM:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License
 
 ## Contributors
 
